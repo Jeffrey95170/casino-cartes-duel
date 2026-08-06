@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 type Player = 0 | 1;
-type Phase = "setup" | "pass" | "playing" | "round" | "finished";
+type Phase = "setup" | "playing" | "ai" | "round" | "finished";
 type Suit = "♠" | "♥" | "♦" | "♣";
 
 type Card = {
@@ -34,6 +34,11 @@ type Game = {
   message: string;
 };
 
+type AiMove =
+  | { kind: "capture"; card: Card; groups: TableGroup[] }
+  | { kind: "build"; card: Card; groups: TableGroup[]; total: number }
+  | { kind: "discard"; card: Card };
+
 const SUITS: Suit[] = ["♠", "♥", "♦", "♣"];
 const RANKS = [
   { rank: "A", value: 1 },
@@ -53,7 +58,7 @@ const RANKS = [
 
 const EMPTY_GAME: Game = {
   phase: "setup",
-  names: ["Joueur 1", "Joueur 2"],
+  names: ["Joueur", "Croupier IA"],
   deck: [],
   hands: [[], []],
   table: [],
@@ -107,6 +112,84 @@ function tableCardCount(table: TableGroup[]) {
   return table.reduce((total, group) => total + group.cards.length, 0);
 }
 
+function findGroupSubsets(table: TableGroup[], target: number, limit = 80) {
+  const results: TableGroup[][] = [];
+
+  function search(index: number, total: number, chosen: TableGroup[]) {
+    if (results.length >= limit) return;
+    if (total === target && chosen.length) {
+      results.push([...chosen]);
+      return;
+    }
+    if (index >= table.length || total >= target) return;
+
+    search(index + 1, total, chosen);
+    for (const value of groupTotals(table[index])) {
+      if (total + value > target) continue;
+      chosen.push(table[index]);
+      search(index + 1, total + value, chosen);
+      chosen.pop();
+    }
+  }
+
+  search(0, 0, []);
+  return results;
+}
+
+function chooseAiMove(game: Game): AiMove {
+  const hand = game.hands[1];
+  let bestCapture: { move: AiMove; score: number } | null = null;
+
+  for (const card of hand) {
+    for (const target of cardTotals(card)) {
+      for (const groups of findGroupSubsets(game.table, target)) {
+        const capturedCards = groups.reduce((total, group) => total + group.cards.length, 0);
+        const buildBonus = groups.filter((group) => group.declaredTotal !== null).length * 9;
+        const clearBonus = groups.length === game.table.length ? 42 : 0;
+        const flexibilityCost = card.rank === "A" ? 5 : 0;
+        const score = capturedCards * 100 + buildBonus + clearBonus - flexibilityCost;
+        if (!bestCapture || score > bestCapture.score) {
+          bestCapture = { move: { kind: "capture", card, groups }, score };
+        }
+      }
+    }
+  }
+
+  if (bestCapture) return bestCapture.move;
+
+  let bestBuild: { move: AiMove; score: number } | null = null;
+  for (const card of hand) {
+    const remainingHand = hand.filter((candidate) => candidate.id !== card.id);
+    for (const targetCard of remainingHand) {
+      for (const target of cardTotals(targetCard)) {
+        for (const playedValue of cardTotals(card)) {
+          const needed = target - playedValue;
+          if (needed <= 0) continue;
+          for (const groups of findGroupSubsets(game.table, needed, 30)) {
+            const gatheredCards = groups.reduce((total, group) => total + group.cards.length, 0);
+            const pressureBonus = groups.some((group) => group.builtBy === 0) ? 12 : 0;
+            const flexibilityCost = card.rank === "A" ? 5 : 0;
+            const score = gatheredCards * 14 + target + pressureBonus - flexibilityCost;
+            if (!bestBuild || score > bestBuild.score) {
+              bestBuild = { move: { kind: "build", card, groups, total: target }, score };
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (bestBuild) return bestBuild.move;
+
+  const discard = [...hand].sort((first, second) => {
+    if (first.rank === "A") return 1;
+    if (second.rank === "A") return -1;
+    return second.value - first.value;
+  })[0];
+
+  return { kind: "discard", card: discard };
+}
+
 function CardFace({
   card,
   selected = false,
@@ -146,10 +229,11 @@ function CardBack({ small = false }: { small?: boolean }) {
 
 export default function Home() {
   const [game, setGame] = useState<Game>(EMPTY_GAME);
-  const [draftNames, setDraftNames] = useState<[string, string]>(["Joueur 1", "Joueur 2"]);
+  const [draftName, setDraftName] = useState("Joueur");
   const [selectedHand, setSelectedHand] = useState<string | null>(null);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [showRules, setShowRules] = useState(false);
+  const aiTimer = useRef<number | null>(null);
 
   const selectedCard = game.hands[game.current].find((card) => card.id === selectedHand) ?? null;
   const selectedTable = game.table.filter((group) => selectedGroups.includes(group.id));
@@ -185,13 +269,16 @@ export default function Home() {
     setSelectedGroups([]);
   }
 
-  function startGame(names = draftNames) {
-    const safeNames: [string, string] = [
-      names[0].trim() || "Joueur 1",
-      names[1].trim() || "Joueur 2",
-    ];
+  function scheduleAiTurn(aiState: Game) {
+    if (aiTimer.current !== null) window.clearTimeout(aiTimer.current);
+    aiTimer.current = window.setTimeout(() => executeAiTurn(aiState), 1150);
+  }
+
+  function startGame(playerName = draftName) {
+    if (aiTimer.current !== null) window.clearTimeout(aiTimer.current);
+    const safeNames: [string, string] = [playerName.trim() || "Joueur", "Croupier IA"];
     const deck = shuffledDeck();
-    const starter = (Math.random() < 0.5 ? 0 : 1) as Player;
+    const starter = (deck[0].value % 2) as Player;
     const table = deck.slice(0, 4).map((card, index) => ({
       id: `table-${index}-${card.id}`,
       cards: [card],
@@ -199,8 +286,8 @@ export default function Home() {
       builtBy: null,
     }));
 
-    setGame({
-      phase: "pass",
+    const initialGame: Game = {
+      phase: starter === 0 ? "playing" : "ai",
       names: safeNames,
       deck: deck.slice(20),
       hands: [deck.slice(4, 12), deck.slice(12, 20)],
@@ -211,9 +298,11 @@ export default function Home() {
       round: 1,
       lastCapturer: null,
       message: `${safeNames[starter]} a été tiré au sort pour commencer.`,
-    });
-    setDraftNames(safeNames);
+    };
+    setGame(initialGame);
+    setDraftName(safeNames[0]);
     clearSelection();
+    if (starter === 1) scheduleAiTurn(initialGame);
   }
 
   function finishTurn(nextState: Game) {
@@ -221,8 +310,14 @@ export default function Home() {
 
     if (!handsEmpty) {
       const nextPlayer = (nextState.current === 0 ? 1 : 0) as Player;
-      setGame({ ...nextState, current: nextPlayer, phase: "pass" });
+      const updatedState: Game = {
+        ...nextState,
+        current: nextPlayer,
+        phase: nextPlayer === 0 ? "playing" : "ai",
+      };
+      setGame(updatedState);
       clearSelection();
+      if (nextPlayer === 1) scheduleAiTurn(updatedState);
       return;
     }
 
@@ -268,6 +363,77 @@ export default function Home() {
     const nextHands: [Card[], Card[]] = [[...hands[0]], [...hands[1]]];
     nextHands[player] = nextHands[player].filter((item) => item.id !== card.id);
     return nextHands;
+  }
+
+  function executeAiTurn(aiState: Game) {
+    if (aiState.phase !== "ai" || aiState.current !== 1 || !aiState.hands[1].length) return;
+    const move = chooseAiMove(aiState);
+
+    if (move.kind === "capture") {
+      const groupIds = move.groups.map((group) => group.id);
+      const takenCards = move.groups.flatMap((group) => group.cards);
+      const captured: [Card[], Card[]] = [
+        [...aiState.captured[0]],
+        [...aiState.captured[1], move.card, ...takenCards],
+      ];
+      finishTurn({
+        ...aiState,
+        hands: removePlayedCard(aiState.hands, 1, move.card),
+        table: aiState.table.filter((group) => !groupIds.includes(group.id)),
+        captured,
+        lastCapturer: 1,
+        message: `Le Croupier IA capture ${takenCards.length} carte${takenCards.length > 1 ? "s" : ""} avec le ${move.card.rank}.`,
+      });
+      return;
+    }
+
+    if (move.kind === "build") {
+      const groupIds = move.groups.map((group) => group.id);
+      const table = aiState.table.filter((group) => !groupIds.includes(group.id));
+      table.push({
+        id: `ai-build-${aiState.round}-${aiState.hands[1].length}-${move.card.id}`,
+        cards: [...move.groups.flatMap((group) => group.cards), move.card],
+        declaredTotal: move.total,
+        builtBy: 1,
+      });
+      finishTurn({
+        ...aiState,
+        hands: removePlayedCard(aiState.hands, 1, move.card),
+        table,
+        message: `Le Croupier IA prépare une combinaison de ${move.total}.`,
+      });
+      return;
+    }
+
+    finishTurn({
+      ...aiState,
+      hands: removePlayedCard(aiState.hands, 1, move.card),
+      table: [
+        ...aiState.table,
+        {
+          id: `ai-loose-${aiState.round}-${aiState.hands[1].length}-${move.card.id}`,
+          cards: [move.card],
+          declaredTotal: null,
+          builtBy: null,
+        },
+      ],
+      message: `Le Croupier IA pose le ${move.card.rank} sur la table.`,
+    });
+  }
+
+  function continueRound() {
+    const updatedState: Game = {
+      ...game,
+      phase: game.starter === 0 ? "playing" : "ai",
+    };
+    setGame(updatedState);
+    if (game.starter === 1) scheduleAiTurn(updatedState);
+  }
+
+  function returnToSetup() {
+    if (aiTimer.current !== null) window.clearTimeout(aiTimer.current);
+    clearSelection();
+    setGame({ ...EMPTY_GAME, names: [draftName, "Croupier IA"] });
   }
 
   function capture() {
@@ -342,15 +508,15 @@ export default function Home() {
         <section className="setup-card">
           <div className="setup-copy">
             <div className="brand-mark"><span>♠</span> Maison Noire</div>
-            <p className="eyebrow">Jeu de stratégie · 2 joueurs</p>
+            <p className="eyebrow">Jeu de stratégie · Solo contre l’IA</p>
             <h1>Casino</h1>
             <p className="setup-lead">
               Calculez juste. Tendez vos pièges. Raflez la table.
             </p>
             <div className="quick-rules" aria-label="Résumé des règles">
               <div><strong>3</strong><span>manches</span></div>
-              <div><strong>8</strong><span>cartes chacun</span></div>
-              <div><strong>52</strong><span>cartes en jeu</span></div>
+              <div><strong>1</strong><span>adversaire IA</span></div>
+              <div><strong>∞</strong><span>parties uniques</span></div>
             </div>
           </div>
 
@@ -360,26 +526,23 @@ export default function Home() {
               <span className="deco-card deco-two red">D<span>♥</span></span>
               <span className="deco-card deco-three">V<span>♣</span></span>
             </div>
-            <h2>Autour de la table</h2>
-            <p>Entrez les noms, puis passez l’écran à chaque tour pour garder vos cartes secrètes.</p>
+            <h2>Affrontez la maison</h2>
+            <p>Le Croupier IA étudie la table, cherche la meilleure capture et prépare ses prochains coups.</p>
+            <div className="ai-opponent">
+              <span className="ai-seal">IA</span>
+              <span><b>Croupier IA</b><small>Adversaire stratégique</small></span>
+              <i>En ligne</i>
+            </div>
             <label>
-              Premier joueur
+              Votre nom
               <input
-                value={draftNames[0]}
+                value={draftName}
                 maxLength={18}
-                onChange={(event) => setDraftNames([event.target.value, draftNames[1]])}
-              />
-            </label>
-            <label>
-              Deuxième joueur
-              <input
-                value={draftNames[1]}
-                maxLength={18}
-                onChange={(event) => setDraftNames([draftNames[0], event.target.value])}
+                onChange={(event) => setDraftName(event.target.value)}
               />
             </label>
             <button className="primary-button start-button" onClick={() => startGame()}>
-              Distribuer les cartes <span>→</span>
+              Affronter le Croupier <span>→</span>
             </button>
             <button className="text-button" onClick={() => setShowRules(true)}>
               Comment jouer ?
@@ -405,7 +568,7 @@ export default function Home() {
         </div>
         <div className="header-actions">
           <button className="icon-button" onClick={() => setShowRules(true)} aria-label="Voir les règles">?</button>
-          <button className="quiet-button" onClick={() => setGame({ ...EMPTY_GAME, names: game.names })}>
+          <button className="quiet-button" onClick={returnToSetup}>
             Quitter
           </button>
         </div>
@@ -413,8 +576,8 @@ export default function Home() {
 
       <section className="scoreboard" aria-label="Scores">
         {([0, 1] as Player[]).map((player) => (
-          <div className={`player-score${game.current === player && game.phase === "playing" ? " is-turn" : ""}`} key={player}>
-            <span className={`avatar avatar-${player + 1}`}>{game.names[player].slice(0, 1).toUpperCase()}</span>
+          <div className={`player-score${game.current === player && (game.phase === "playing" || game.phase === "ai") ? " is-turn" : ""}`} key={player}>
+            <span className={`avatar avatar-${player + 1}`}>{player === 1 ? "IA" : game.names[player].slice(0, 1).toUpperCase()}</span>
             <span className="player-data">
               <strong>{game.names[player]}</strong>
               <small>{game.hands[player].length} carte{game.hands[player].length !== 1 ? "s" : ""} en main</small>
@@ -449,8 +612,8 @@ export default function Home() {
                 <button
                   key={group.id}
                   className={`table-group${isSelected ? " selected" : ""}${group.cards.length > 1 ? " build-group" : ""}`}
-                  onClick={() => game.phase === "playing" && toggleGroup(group.id)}
-                  disabled={game.phase !== "playing"}
+                  onClick={() => game.phase === "playing" && game.current === 0 && toggleGroup(group.id)}
+                  disabled={game.phase !== "playing" || game.current !== 0}
                   aria-pressed={isSelected}
                   aria-label={label}
                 >
@@ -481,8 +644,8 @@ export default function Home() {
       <section className="hand-panel">
         <div className="hand-heading">
           <div>
-            <p className="eyebrow">Au tour de</p>
-            <h2>{game.names[game.current]}</h2>
+            <p className="eyebrow">{game.phase === "ai" ? "L’intelligence artificielle joue" : "À vous de jouer"}</p>
+            <h2>{game.phase === "ai" ? "Le Croupier réfléchit…" : game.names[0]}</h2>
           </div>
           {game.phase === "playing" && (
             <p className="instruction">
@@ -500,11 +663,11 @@ export default function Home() {
                 setSelectedHand(selectedHand === card.id ? null : card.id);
                 setSelectedGroups([]);
               }}
-              disabled={game.phase !== "playing"}
+              disabled={game.phase !== "playing" || game.current !== 0}
               aria-pressed={selectedHand === card.id}
               aria-label={`Jouer le ${card.rank} de ${card.suit}`}
             >
-              {game.phase === "playing" ? (
+              {game.phase === "playing" && game.current === 0 ? (
                 <CardFace card={card} selected={selectedHand === card.id} />
               ) : (
                 <CardBack />
@@ -513,40 +676,33 @@ export default function Home() {
           ))}
         </div>
 
-        <div className="action-bar">
-          <span className="selection-summary">
-            {selectedCard
-              ? `${selectedCard.rank}${selectedCard.suit} sélectionné${selectedGroups.length ? ` · ${selectedGroups.length} groupe${selectedGroups.length > 1 ? "s" : ""} visé${selectedGroups.length > 1 ? "s" : ""}` : ""}`
-              : "Aucune carte sélectionnée"}
-          </span>
-          <div className="turn-actions">
-            <button className="action-button capture-button" disabled={!canCapture} onClick={capture}>
-              <span>✦</span> Capturer
-            </button>
-            <button className="action-button build-button" disabled={!buildChoice} onClick={build}>
-              {buildChoice?.disrupt ? "Perturber" : "Préparer"}
-              {buildChoice && <small>Total {buildChoice.total}</small>}
-            </button>
-            <button className="action-button discard-button" disabled={!selectedCard} onClick={discard}>
-              Poser seule
-            </button>
+        {game.phase === "ai" ? (
+          <div className="ai-thinking" role="status" aria-live="polite">
+            <span className="thinking-dots"><i></i><i></i><i></i></span>
+            <span><b>Analyse en cours</b><small>Le Croupier compare les captures et anticipe votre prochain coup.</small></span>
           </div>
-        </div>
+        ) : (
+          <div className="action-bar">
+            <span className="selection-summary">
+              {selectedCard
+                ? `${selectedCard.rank}${selectedCard.suit} sélectionné${selectedGroups.length ? ` · ${selectedGroups.length} groupe${selectedGroups.length > 1 ? "s" : ""} visé${selectedGroups.length > 1 ? "s" : ""}` : ""}`
+                : "Aucune carte sélectionnée"}
+            </span>
+            <div className="turn-actions">
+              <button className="action-button capture-button" disabled={!canCapture} onClick={capture}>
+                <span>✦</span> Capturer
+              </button>
+              <button className="action-button build-button" disabled={!buildChoice} onClick={build}>
+                {buildChoice?.disrupt ? "Perturber" : "Préparer"}
+                {buildChoice && <small>Total {buildChoice.total}</small>}
+              </button>
+              <button className="action-button discard-button" disabled={!selectedCard} onClick={discard}>
+                Poser seule
+              </button>
+            </div>
+          </div>
+        )}
       </section>
-
-      {game.phase === "pass" && (
-        <div className="modal-backdrop turn-backdrop">
-          <section className="turn-card" role="dialog" aria-modal="true" aria-labelledby="turn-title">
-            <span className="turn-suit">♠</span>
-            <p className="eyebrow">Passez l’écran</p>
-            <h2 id="turn-title">À {game.names[game.current]} de jouer</h2>
-            <p>Quand l’autre joueur ne regarde plus, révélez votre main.</p>
-            <button className="primary-button" onClick={() => setGame({ ...game, phase: "playing" })}>
-              Je suis {game.names[game.current]} <span>→</span>
-            </button>
-          </section>
-        </div>
-      )}
 
       {game.phase === "round" && (
         <div className="modal-backdrop">
@@ -560,7 +716,7 @@ export default function Home() {
               <i>—</i>
               <span><b>{scores[1]}</b> {game.names[1]}</span>
             </div>
-            <button className="primary-button" onClick={() => setGame({ ...game, phase: "pass" })}>
+            <button className="primary-button" onClick={continueRound}>
               Continuer <span>→</span>
             </button>
           </section>
@@ -586,11 +742,11 @@ export default function Home() {
               ))}
             </div>
             <div className="final-actions">
-              <button className="primary-button" onClick={() => startGame(game.names)}>
+              <button className="primary-button" onClick={() => startGame(game.names[0])}>
                 Rejouer <span>↻</span>
               </button>
-              <button className="quiet-button light" onClick={() => setGame({ ...EMPTY_GAME, names: game.names })}>
-                Changer les joueurs
+              <button className="quiet-button light" onClick={returnToSetup}>
+                Changer mon nom
               </button>
             </div>
           </section>
@@ -617,6 +773,7 @@ function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
           <article><span>03</span><h3>Préparez</h3><p>Ajoutez votre carte à une combinaison si vous gardez en main une carte égale au nouveau total.</p></article>
           <article><span>04</span><h3>Ou posez</h3><p>Sans capture, laissez votre carte seule sur la table pour créer une occasion future.</p></article>
         </div>
+        <div className="rule-note ai-rule-note"><b>Votre adversaire</b><p>Le Croupier IA évalue toutes les captures accessibles, privilégie les plus rentables et prépare des combinaisons lorsqu’aucune prise n’est possible.</p></div>
         <div className="rule-note"><b>Le but</b><p>Après trois manches, la plus grande réserve gagne. Les dernières cartes vont au dernier joueur ayant capturé.</p></div>
         <button className="primary-button" onClick={onClose}>Compris, jouons</button>
       </section>

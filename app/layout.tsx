@@ -13,8 +13,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Casino — Jeu de cartes stratégique",
-  description: "Un jeu de capture et de calcul pour deux joueurs, jouable sur le même écran.",
+  metadataBase: new URL("https://casino-cartes-duel.touch170.chatgpt.site"),
+  title: "Casino — Affrontez le Croupier IA",
+  description: "Un jeu de capture et de calcul en trois manches contre une intelligence artificielle stratégique.",
+  openGraph: {
+    title: "Casino — Affrontez le Croupier IA",
+    description: "Calculez juste, tendez vos pièges et défiez une intelligence artificielle stratégique.",
+    images: [{ url: "/og.png", width: 1731, height: 909, alt: "Casino — Affrontez le Croupier IA" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Casino — Affrontez le Croupier IA",
+    description: "Un duel de cartes stratégique en trois manches.",
+    images: ["/og.png"],
+  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

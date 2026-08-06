@@ -19,8 +19,8 @@ test("server-renders the Casino game", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Casino — Jeu de cartes stratégique<\/title>/i);
+  assert.match(html, /<title>Casino — Affrontez le Croupier IA<\/title>/i);
   assert.match(html, /Calculez juste/);
-  assert.match(html, /Distribuer les cartes/);
+  assert.match(html, /Affronter le Croupier/);
   assert.doesNotMatch(html, /codex-preview/);
 });
