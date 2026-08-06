@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -12,25 +12,42 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const productionHost =
+  process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ??
+  "casino-cartes-duel.vercel.app";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://casino-cartes-duel.touch170.chatgpt.site"),
-  title: "Casino — Affrontez le Croupier IA",
-  description: "Un jeu de capture et de calcul en trois manches contre une intelligence artificielle stratégique.",
+  metadataBase: new URL(`https://${productionHost}`),
+  title: "Casino Cartes Duel",
+  description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+  applicationName: "Casino Cartes Duel",
+  robots: { index: true, follow: true },
   openGraph: {
-    title: "Casino — Affrontez le Croupier IA",
-    description: "Calculez juste, tendez vos pièges et défiez une intelligence artificielle stratégique.",
-    images: [{ url: "/og.png", width: 1731, height: 909, alt: "Casino — Affrontez le Croupier IA" }],
+    title: "Casino Cartes Duel",
+    description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+    type: "website",
+    locale: "fr_FR",
+    siteName: "Casino Cartes Duel",
+    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Casino Cartes Duel" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Casino — Affrontez le Croupier IA",
-    description: "Un duel de cartes stratégique en trois manches.",
-    images: ["/og.png"],
+    title: "Casino Cartes Duel",
+    description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+    images: ["/og.jpg"],
   },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#071b17",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

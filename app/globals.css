@@ -26,7 +26,16 @@ body {
 }
 
 button, input { font: inherit; }
-button { -webkit-tap-highlight-color: transparent; }
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--gold-bright);
+  outline-offset: 3px;
+}
 
 .setup-shell {
   min-height: 100vh;
@@ -218,7 +227,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .primary-button:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(233,95,78,.3); }
 .primary-button span { font-size: 20px; }
 .start-button { width: 100%; margin-top: 8px; }
-.text-button { align-self: center; margin-top: 18px; background: transparent; color: var(--felt); font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
+.text-button { align-self: center; min-height: 44px; margin-top: 8px; padding: 10px 14px; background: transparent; color: var(--felt); font-size: 13px; font-weight: 700; text-decoration: underline; text-underline-offset: 4px; }
 
 .game-shell {
   min-height: 100vh;
@@ -240,10 +249,10 @@ button { -webkit-tap-highlight-color: transparent; }
 
 .brand-mark.compact { position: static; font-size: 13px; }
 .header-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
-.quiet-button { padding: 10px 14px; border-radius: 9px; background: transparent; color: rgba(255,255,255,.55); font-size: 12px; }
+.quiet-button { min-height: 44px; padding: 10px 14px; border-radius: 9px; background: transparent; color: rgba(255,255,255,.55); font-size: 12px; }
 .quiet-button:hover { background: rgba(255,255,255,.07); color: white; }
 .quiet-button.light { color: var(--cream); }
-.icon-button { width: 36px; height: 36px; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; background: transparent; color: var(--cream); font-family: Georgia, serif; font-size: 16px; }
+.icon-button { width: 44px; height: 44px; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; background: transparent; color: var(--cream); font-family: Georgia, serif; font-size: 16px; }
 
 .round-track { display: flex; align-items: center; gap: 7px; }
 .round-track > span { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; color: rgba(255,255,255,.35); font-size: 10px; }
@@ -436,7 +445,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .rules-card { position: relative; width: min(720px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: var(--cream); color: var(--ink); text-align: left; }
 .rules-card .eyebrow { color: #a8720f; }
 .rules-card h2 { margin-bottom: 28px; font-size: 40px; }
-.close-button { position: absolute; top: 19px; right: 19px; width: 36px; height: 36px; border: 1px solid #d6d8cf; border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer; font-size: 22px; line-height: 1; }
+.close-button { position: absolute; top: 19px; right: 19px; width: 44px; height: 44px; border: 1px solid #d6d8cf; border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer; font-size: 22px; line-height: 1; touch-action: manipulation; }
 .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 28px; }
 .rules-grid article { position: relative; padding-left: 42px; }
 .rules-grid article > span { position: absolute; left: 0; top: 1px; color: #b58a31; font-family: Georgia, serif; font-size: 12px; }
