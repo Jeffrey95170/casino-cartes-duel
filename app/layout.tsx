@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,13 +20,15 @@ const productionHost =
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${productionHost}`),
-  title: "Casino Cartes Duel",
-  description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+  title: "Casino Cartes Duel — Jeu de stratégie gratuit",
+  description:
+    "Affrontez le Croupier dans Casino Cartes Duel, un jeu de cartes stratégique où calcul, anticipation et pièges font la différence. Gratuit et sans argent réel.",
   applicationName: "Casino Cartes Duel",
   robots: { index: true, follow: true },
   openGraph: {
-    title: "Casino Cartes Duel",
-    description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+    title: "Casino Cartes Duel — Jeu de stratégie gratuit",
+    description:
+      "Affrontez le Croupier dans Casino Cartes Duel, un jeu de cartes stratégique où calcul, anticipation et pièges font la différence. Gratuit et sans argent réel.",
     type: "website",
     locale: "fr_FR",
     siteName: "Casino Cartes Duel",
@@ -32,8 +36,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Casino Cartes Duel",
-    description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+    title: "Casino Cartes Duel — Jeu de stratégie gratuit",
+    description:
+      "Affrontez le Croupier dans Casino Cartes Duel, un jeu de cartes stratégique où calcul, anticipation et pièges font la différence. Gratuit et sans argent réel.",
     images: ["/og.jpg"],
   },
   icons: {
@@ -53,7 +58,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        {children}
+        <Analytics />
+        <SpeedInsights />
+      </body>
     </html>
   );
 }
