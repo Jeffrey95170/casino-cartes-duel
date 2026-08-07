@@ -13,7 +13,24 @@ export type ProductEvent =
   | "replay_clicked"
   | "share_clicked"
   | "share_completed"
-  | "link_copied";
+  | "link_copied"
+  | "anonymous_session_created"
+  | "account_upgrade_started"
+  | "account_created"
+  | "login"
+  | "logout"
+  | "profile_viewed"
+  | "leaderboard_viewed"
+  | "leaderboard_my_position"
+  | "match_started"
+  | "match_completed_verified"
+  | "match_abandoned"
+  | "match_invalid"
+  | "xp_awarded"
+  | "level_up"
+  | "achievement_unlocked"
+  | "share_profile"
+  | "share_result";
 
 export function trackProductEvent(
   name: ProductEvent,

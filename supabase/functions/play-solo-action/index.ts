@@ -83,6 +83,28 @@ Deno.serve(async (request) => {
       .eq("user_id", user.id)
       .single();
     if (sessionError || !session) throw new Error("Partie introuvable ou non autorisée.");
+
+    const { data: replayedAction, error: replayError } = await service
+      .from("match_actions")
+      .select("match_id,user_id")
+      .eq("action_id", payload.actionId)
+      .maybeSingle();
+    if (replayError) throw new Error("Impossible de vérifier l’idempotence de l’action.");
+    if (replayedAction) {
+      if (replayedAction.match_id !== payload.matchId || replayedAction.user_id !== user.id) {
+        throw new Error("actionId déjà utilisé.");
+      }
+      return jsonResponse({
+        data: functionView({
+          match_id: payload.matchId,
+          version: session.version,
+          game_state: session.game_state,
+          duplicate: true,
+          progress: null,
+        }),
+      });
+    }
+
     if (session.status !== "active") throw new Error("Cette partie n’est plus active.");
     if (session.version !== payload.expectedVersion) throw new Error("Version de partie obsolète.");
     if (!isGame(session.game_state)) throw new Error("État serveur illisible.");

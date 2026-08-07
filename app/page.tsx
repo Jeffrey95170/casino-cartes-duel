@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 
+import { useAuth } from "@/components/auth-provider";
 import { CardBack, CardFace } from "@/components/game-card";
 import { RulesModal } from "@/components/rules-modal";
 import { TutorialModal } from "@/components/tutorial-modal";
@@ -20,6 +22,7 @@ import {
   type GameMove,
   type Player,
 } from "@/lib/game";
+import { playSoloAction, startSoloMatch } from "@/lib/supabase/functions";
 import {
   EMPTY_STATS,
   hasSeenTutorial,
@@ -29,10 +32,12 @@ import {
   rememberTutorial,
   type GameStats,
 } from "@/lib/local-storage";
+import type { ProgressReward } from "@/types/game-api";
 
 const PUBLIC_URL = "https://casino-cartes-duel.vercel.app/";
 
 export default function Home() {
+  const auth = useAuth();
   const [game, setGame] = useState<Game>(EMPTY_GAME);
   const [draftName, setDraftName] = useState("Joueur");
   const [selectedHand, setSelectedHand] = useState<string | null>(null);
@@ -42,6 +47,11 @@ export default function Home() {
   const [startAfterTutorial, setStartAfterTutorial] = useState(false);
   const [stats, setStats] = useState<GameStats>(EMPTY_STATS);
   const [shareStatus, setShareStatus] = useState("");
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [matchVersion, setMatchVersion] = useState(1);
+  const [progress, setProgress] = useState<ProgressReward | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [serverBusy, setServerBusy] = useState(false);
   const aiTimer = useRef<number | null>(null);
   const recordedGame = useRef(false);
 
@@ -52,20 +62,6 @@ export default function Home() {
       if (aiTimer.current !== null) window.clearTimeout(aiTimer.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (game.phase !== "finished" || recordedGame.current) return;
-    recordedGame.current = true;
-    const playerScore = game.captured[0].length;
-    const aiScore = game.captured[1].length;
-    const result = playerScore === aiScore ? "draw" : playerScore > aiScore ? "win" : "loss";
-    setStats((current) => recordResult(current, playerScore, result));
-    trackProductEvent("game_completed", { player_score: playerScore, ai_score: aiScore });
-    trackProductEvent(
-      result === "win" ? "game_won" : result === "loss" ? "game_lost" : "game_drawn",
-      { player_score: playerScore },
-    );
-  }, [game]);
 
   const selectedCard = game.hands[0].find((card) => card.id === selectedHand) ?? null;
   const selectedTable = useMemo(
@@ -128,16 +124,53 @@ export default function Home() {
     setGame(next);
     clearSelection();
     if (next.phase === "ai") scheduleAiTurn(next);
+    if (next.phase === "finished" && !recordedGame.current) {
+      recordedGame.current = true;
+      const playerScore = next.captured[0].length;
+      const aiScore = next.captured[1].length;
+      const result = playerScore === aiScore ? "draw" : playerScore > aiScore ? "win" : "loss";
+      if (!matchId) setStats((current) => recordResult(current, playerScore, result));
+      trackProductEvent("game_completed", { player_score: playerScore, ai_score: aiScore });
+      trackProductEvent(
+        result === "win" ? "game_won" : result === "loss" ? "game_lost" : "game_drawn",
+        { player_score: playerScore },
+      );
+    }
   }
 
-  function beginGame(playerName = draftName, replay = false) {
+  async function beginGame(playerName = draftName, replay = false) {
     if (aiTimer.current !== null) window.clearTimeout(aiTimer.current);
-    const next = createInitialGame(playerName);
     recordedGame.current = false;
-    setDraftName(next.names[0]);
     setShareStatus("");
-    setStats((current) => incrementStarted(current));
+    setServerError(null);
+    setProgress(null);
     if (replay) trackProductEvent("replay_clicked");
+    if (auth.configured) {
+      if (!auth.session) {
+        setServerError("La session invitée est encore en cours de préparation. Réessaie dans un instant.");
+        return;
+      }
+      setServerBusy(true);
+      try {
+        const response = await startSoloMatch(auth.session);
+        setMatchId(response.matchId);
+        setMatchVersion(response.version);
+        setDraftName(response.game.names[0]);
+        setResolvedGame(response.game);
+        trackProductEvent("match_started");
+        await auth.refreshProfile();
+      } catch (error) {
+        setServerError(error instanceof Error ? error.message : "Impossible de démarrer la partie vérifiée.");
+      } finally {
+        setServerBusy(false);
+      }
+      return;
+    }
+
+    const next = createInitialGame(playerName);
+    setMatchId(null);
+    setDraftName(next.names[0]);
+    setStats((current) => incrementStarted(current));
     trackProductEvent("game_started");
     setResolvedGame(next);
   }
@@ -170,20 +203,67 @@ export default function Home() {
     }
   }
 
+  async function submitServerAction(action: GameMove | { kind: "continue" }) {
+    if (!auth.session || !matchId || serverBusy) return;
+    setServerBusy(true);
+    setServerError(null);
+    try {
+      const response = await playSoloAction(auth.session, {
+        matchId,
+        expectedVersion: matchVersion,
+        actionId: crypto.randomUUID(),
+        action,
+      });
+      setMatchVersion(response.version);
+      setResolvedGame(response.game);
+      if (response.progress) {
+        setProgress(response.progress);
+        trackProductEvent("match_completed_verified", { result: response.progress.result });
+        trackProductEvent("xp_awarded", { xp: response.progress.xp_awarded });
+        if (response.progress.new_level > response.progress.old_level) trackProductEvent("level_up");
+        response.progress.achievements_unlocked.forEach(() => trackProductEvent("achievement_unlocked"));
+        await auth.refreshProfile();
+      }
+    } catch (error) {
+      setServerError(error instanceof Error ? error.message : "Impossible d’enregistrer cette action.");
+    } finally {
+      setServerBusy(false);
+    }
+  }
+
   function playMove(move: GameMove) {
     if (game.phase !== "playing" || game.current !== 0) return;
+    if (matchId) {
+      void submitServerAction(move);
+      return;
+    }
     setResolvedGame(applyMove(game, move, 0));
   }
 
   function continueRound() {
+    if (matchId) {
+      void submitServerAction({ kind: "continue" });
+      return;
+    }
     const next = continueRoundState(game);
     setResolvedGame(next);
   }
 
   function returnToSetup() {
     if (aiTimer.current !== null) window.clearTimeout(aiTimer.current);
+    if (matchId && auth.session && game.phase !== "finished") {
+      void playSoloAction(auth.session, {
+        matchId,
+        expectedVersion: matchVersion,
+        actionId: crypto.randomUUID(),
+        action: { kind: "abandon" },
+      }).then(() => trackProductEvent("match_abandoned")).catch(() => undefined);
+    }
     clearSelection();
     setShareStatus("");
+    setServerError(null);
+    setProgress(null);
+    setMatchId(null);
     setGame({ ...EMPTY_GAME, names: [draftName, "Croupier IA"] });
   }
 
@@ -221,6 +301,7 @@ export default function Home() {
         : `Le Croupier gagne ${scores[1]}–${scores[0]}. À vous de faire mieux dans Casino Cartes Duel !`;
     const shareData = { title: "Casino Cartes Duel", text: resultText, url: PUBLIC_URL };
     trackProductEvent("share_clicked");
+    trackProductEvent("share_result");
 
     if (navigator.share) {
       try {
@@ -248,11 +329,11 @@ export default function Home() {
         <section className="setup-card">
           <div className="setup-copy">
             <div className="brand-mark"><span>♠</span> Maison Noire</div>
-            <span className="beta-badge">Bêta 0.2</span>
+            <span className="beta-badge">Progression V1</span>
             <p className="eyebrow">Jeu de stratégie · Solo contre l’IA</p>
             <h1>Casino</h1>
             <p className="setup-lead">Calculez juste. Tendez vos pièges. Raflez la table.</p>
-            <p className="trust-line">Gratuit · Sans compte · Sans argent réel</p>
+            <p className="trust-line">Gratuit · Compte invité automatique · Sans argent réel</p>
             <div className="quick-rules" aria-label="Résumé du jeu">
               <div><strong>3</strong><span>manches</span></div>
               <div><strong>1</strong><span>Croupier IA</span></div>
@@ -269,30 +350,41 @@ export default function Home() {
             <div className="setup-action-copy">
               <p className="eyebrow">Prêt en quelques secondes</p>
               <h2>Affrontez le Croupier</h2>
-              <p>L’IA calcule ses captures et prépare ses prochains coups.</p>
+              <p>L’IA calcule ses captures. Les résultats vérifiés alimentent votre progression.</p>
             </div>
-            <label>
-              Votre nom <small>(facultatif)</small>
-              <input
-                value={draftName}
-                maxLength={18}
-                placeholder="Joueur"
-                autoComplete="nickname"
-                onChange={(event) => setDraftName(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && requestStart()}
-              />
-            </label>
-            <button className="primary-button start-button" onClick={requestStart}>
-              Jouer maintenant <span>→</span>
+            {auth.configured ? (
+              <div className="account-summary">
+                <span className="avatar avatar-1">{(auth.profile?.username ?? "J").slice(0, 1).toUpperCase()}</span>
+                <span><b>{auth.loading ? "Préparation du compte…" : auth.profile?.username ?? "Invité"}</b><small>{auth.isAnonymous ? "Compte invité" : "Progression sauvegardée"} · Niveau {auth.stats?.level ?? 1}</small></span>
+                <Link href="/profil">Profil</Link>
+              </div>
+            ) : (
+              <label>
+                Votre nom <small>(mode local non classé)</small>
+                <input
+                  value={draftName}
+                  maxLength={18}
+                  placeholder="Joueur"
+                  autoComplete="nickname"
+                  onChange={(event) => setDraftName(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && requestStart()}
+                />
+              </label>
+            )}
+            <button className="primary-button start-button" aria-label="Jouer maintenant" onClick={requestStart} disabled={serverBusy || auth.loading}>
+              {serverBusy || auth.loading ? "Préparation…" : "Jouer maintenant"} <span>→</span>
             </button>
+            {(serverError || auth.error) && <p className="server-error" role="alert">{serverError ?? auth.error}</p>}
+            {!auth.configured && <p className="offline-note">Supabase non configuré : cette partie restera locale et ne donnera aucun XP.</p>}
             <div className="setup-links">
               <button className="text-button" onClick={() => openTutorial("home")}>Tutoriel express</button>
               <button className="text-button" onClick={() => setShowRules(true)}>Règles complètes</button>
+              <Link className="text-link" href="/classement">Classement</Link>
             </div>
-            <div className="local-stats" aria-label="Vos statistiques sur cet appareil">
-              <span><b>{stats.gamesCompleted}</b> terminées</span>
-              <span><b>{stats.wins}</b> victoire{stats.wins !== 1 ? "s" : ""}</span>
-              <span><b>{stats.bestCaptured}</b> record</span>
+            <div className="local-stats" aria-label="Vos statistiques">
+              <span><b>{auth.stats?.games_completed ?? stats.gamesCompleted}</b> terminées</span>
+              <span><b>{auth.stats?.wins ?? stats.wins}</b> victoire{(auth.stats?.wins ?? stats.wins) !== 1 ? "s" : ""}</span>
+              <span><b>{auth.stats?.best_cards_captured ?? stats.bestCaptured}</b> record</span>
             </div>
           </div>
         </section>
@@ -313,6 +405,8 @@ export default function Home() {
           <small>Manche {game.round} / 3</small>
         </div>
         <div className="header-actions">
+          <Link className="guide-button" href="/profil">Profil</Link>
+          <Link className="guide-button" href="/classement">Classement</Link>
           <button className="guide-button" onClick={() => openTutorial("header")}>Guide</button>
           <button className="icon-button" onClick={() => setShowRules(true)} aria-label="Voir les règles">?</button>
           <button className="quiet-button" onClick={returnToSetup}>Quitter</button>
@@ -363,7 +457,7 @@ export default function Home() {
                   key={group.id}
                   className={`table-group${isSelected ? " selected" : ""}${group.cards.length > 1 ? " build-group" : ""}`}
                   onClick={() => toggleGroup(group.id)}
-                  disabled={game.phase !== "playing" || game.current !== 0}
+                  disabled={serverBusy || game.phase !== "playing" || game.current !== 0}
                   aria-pressed={isSelected}
                   aria-label={label}
                 >
@@ -397,8 +491,8 @@ export default function Home() {
       <section className="hand-panel">
         <div className="hand-heading">
           <div>
-            <p className="eyebrow">{game.phase === "ai" ? "L’intelligence artificielle joue" : "À vous de jouer"}</p>
-            <h2>{game.phase === "ai" ? "Le Croupier réfléchit…" : game.names[0]}</h2>
+            <p className="eyebrow">{game.phase === "ai" || serverBusy ? "L’intelligence artificielle joue" : "À vous de jouer"}</p>
+            <h2>{game.phase === "ai" || serverBusy ? "Le Croupier réfléchit…" : game.names[0]}</h2>
           </div>
           {game.phase === "playing" && <p className="instruction">Touchez une carte, puis les cartes à capturer.</p>}
         </div>
@@ -412,7 +506,7 @@ export default function Home() {
                 setSelectedHand(selectedHand === card.id ? null : card.id);
                 setSelectedGroups([]);
               }}
-              disabled={game.phase !== "playing" || game.current !== 0}
+              disabled={serverBusy || game.phase !== "playing" || game.current !== 0}
               aria-pressed={selectedHand === card.id}
               aria-label={`Jouer le ${card.rank} de ${card.suit}`}
             >
@@ -421,7 +515,7 @@ export default function Home() {
           ))}
         </div>
 
-        {game.phase === "ai" ? (
+        {game.phase === "ai" || serverBusy ? (
           <div className="ai-thinking" role="status" aria-live="polite">
             <span className="thinking-dots"><i></i><i></i><i></i></span>
             <span><b>Analyse en cours</b><small>Le Croupier compare les captures et anticipe votre prochain coup.</small></span>
@@ -432,14 +526,14 @@ export default function Home() {
               {selectionFeedback.text}
             </span>
             <div className="turn-actions">
-              <button className="action-button capture-button" disabled={!canCapture} onClick={capture}>
+              <button className="action-button capture-button" disabled={!canCapture || serverBusy} onClick={capture}>
                 <span>✦</span> Capturer
               </button>
-              <button className="action-button build-button" disabled={!buildChoice} onClick={build}>
+              <button className="action-button build-button" disabled={!buildChoice || serverBusy} onClick={build}>
                 {buildChoice?.disrupt ? "Perturber" : "Préparer"}
                 {buildChoice && <small>Total {buildChoice.total}</small>}
               </button>
-              <button className="action-button discard-button" disabled={!selectedCard} onClick={discard}>
+              <button className="action-button discard-button" disabled={!selectedCard || serverBusy} onClick={discard}>
                 Poser seule
               </button>
             </div>
@@ -457,7 +551,7 @@ export default function Home() {
             <div className="mid-scores">
               <span>{game.names[0]} <b>{scores[0]}</b></span><i>—</i><span><b>{scores[1]}</b> {game.names[1]}</span>
             </div>
-            <button className="primary-button" onClick={continueRound}>Continuer <span>→</span></button>
+            <button className="primary-button" onClick={continueRound} disabled={serverBusy}>Continuer <span>→</span></button>
           </section>
         </div>
       )}
@@ -482,13 +576,30 @@ export default function Home() {
                 </div>
               ))}
             </div>
-            <p className="final-stat">Votre record sur cet appareil : <b>{Math.max(stats.bestCaptured, scores[0])} cartes</b></p>
+            {progress ? (
+              <div className="progress-reward" aria-live="polite">
+                <strong>+{progress.xp_awarded} XP</strong>
+                <span>Niveau {progress.old_level}{progress.new_level > progress.old_level ? ` → Niveau ${progress.new_level}` : ""}</span>
+                {progress.old_rank && progress.new_rank && <span>Classement : #{progress.old_rank} → #{progress.new_rank}</span>}
+                {progress.achievements_unlocked.map((achievement) => (
+                  <span className="achievement-toast" key={achievement.code}>{achievement.icon} Succès : {achievement.name}</span>
+                ))}
+              </div>
+            ) : (
+              <p className="final-stat">Record {matchId ? "du profil" : "sur cet appareil"} : <b>{Math.max(auth.stats?.best_cards_captured ?? stats.bestCaptured, scores[0])} cartes</b></p>
+            )}
+            {auth.isAnonymous && matchId && (
+              <p className="guest-save-note">Sauvegarde ta progression sur tous tes appareils sans perdre cet XP.</p>
+            )}
             <div className="final-actions">
               <button className="primary-button" onClick={() => beginGame(game.names[0], true)}>Rejouer <span>↻</span></button>
+              <Link className="share-button link-button" href={auth.isAnonymous ? "/compte" : "/profil"}>{auth.isAnonymous ? "Sauvegarder ma progression" : "Voir mon profil"}</Link>
+              <Link className="share-button link-button" href="/classement">Classement</Link>
               <button className="share-button" onClick={shareResult}>Partager mon résultat</button>
               <button className="quiet-button light" onClick={returnToSetup}>Accueil</button>
             </div>
             {shareStatus && <p className="share-status" role="status" aria-live="polite">{shareStatus}</p>}
+            {serverError && <p className="server-error dark" role="alert">{serverError}</p>}
           </section>
         </div>
       )}
