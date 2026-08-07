@@ -26,5 +26,12 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "supabase/functions/start-solo-match/index.ts",
+    "supabase/functions/play-solo-action/index.ts",
+    "supabase/functions/_shared/http.ts",
+    "supabase/functions/_shared/supabase.ts",
+    "supabase/functions/_shared/view.ts"
+  ]
 }

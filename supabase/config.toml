@@ -1,0 +1,18 @@
+project_id = "casino-cartes-duel"
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://casino-cartes-duel.vercel.app"]
+enable_signup = true
+enable_anonymous_sign_ins = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[functions.start-solo-match]
+verify_jwt = true
+
+[functions.play-solo-action]
+verify_jwt = true
