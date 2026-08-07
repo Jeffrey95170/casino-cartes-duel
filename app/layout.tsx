@@ -1,0 +1,59 @@
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const productionHost =
+  process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ??
+  "casino-cartes-duel.vercel.app";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(`https://${productionHost}`),
+  title: "Casino Cartes Duel",
+  description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+  applicationName: "Casino Cartes Duel",
+  robots: { index: true, follow: true },
+  openGraph: {
+    title: "Casino Cartes Duel",
+    description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+    type: "website",
+    locale: "fr_FR",
+    siteName: "Casino Cartes Duel",
+    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Casino Cartes Duel" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Casino Cartes Duel",
+    description: "Jeu de cartes stratégique pour deux joueurs — sans argent réel",
+    images: ["/og.jpg"],
+  },
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+  themeColor: "#071b17",
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html lang="fr">
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>{children}</body>
+    </html>
+  );
+}
