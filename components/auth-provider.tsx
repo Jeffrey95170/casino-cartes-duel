@@ -8,6 +8,7 @@ import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase/clie
 import type { Achievement, MatchSummary, PlayerProfile, PlayerStats } from "@/types/game-api";
 
 type UpgradeInput = { email: string; password: string; username: string };
+type OAuthProvider = "google" | "github";
 
 type AuthContextValue = {
   user: User | null;
@@ -22,7 +23,7 @@ type AuthContextValue = {
   error: string | null;
   signInGuest: () => Promise<void>;
   upgradeAccount: (input: UpgradeInput) => Promise<void>;
-  linkGoogle: () => Promise<void>;
+  linkProvider: (provider: OAuthProvider) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   updateUsername: (username: string) => Promise<void>;
@@ -142,13 +143,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refreshProfile();
   }, [refreshProfile, updateUsername, user]);
 
-  const linkGoogle = useCallback(async () => {
+  const linkProvider = useCallback(async (provider: OAuthProvider) => {
     const supabase = getSupabaseBrowserClient();
-    if (!supabase || !user?.is_anonymous) throw new Error("La liaison Google exige un compte invité actif.");
+    if (!supabase || !user?.is_anonymous) throw new Error("La liaison exige un compte invité actif.");
     trackProductEvent("account_upgrade_started");
     const { error: linkError } = await supabase.auth.linkIdentity({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
+      provider,
+      options: { redirectTo: new URL("/compte", window.location.origin).toString() },
     });
     if (linkError) throw linkError;
   }, [user]);
@@ -191,14 +192,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error,
     signInGuest,
     upgradeAccount,
-    linkGoogle,
+    linkProvider,
     signIn,
     signOut,
     updateUsername,
     isUsernameAvailable,
     refreshProfile,
   }), [
-    achievements, configured, error, isUsernameAvailable, linkGoogle, loading, matches, profile,
+    achievements, configured, error, isUsernameAvailable, linkProvider, loading, matches, profile,
     refreshProfile, session, signIn, signInGuest, signOut, stats, updateUsername, upgradeAccount, user,
   ]);
 

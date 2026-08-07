@@ -614,7 +614,11 @@ a { color: inherit; }
 .availability.taken, .availability.invalid { color: #ff9e92; }
 .account-divider { display: flex; align-items: center; gap: 10px; margin: 20px 0; color: #738d84; font-size: 10px; }
 .account-divider::before, .account-divider::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,.1); }
-.google-button { width: 100%; min-height: 48px; border: 1px solid rgba(255,255,255,.18); border-radius: 10px; background: white; color: #263a34; cursor: pointer; font-weight: 750; }
+.oauth-buttons { display: grid; gap: 10px; }
+.oauth-button { width: 100%; min-height: 48px; border: 1px solid rgba(255,255,255,.18); border-radius: 10px; cursor: pointer; font-weight: 750; }
+.oauth-button:disabled { cursor: not-allowed; opacity: .55; }
+.google-button { background: white; color: #263a34; }
+.github-button { background: #24292f; color: white; }
 .account-message { border-radius: 10px; padding: 10px; background: rgba(255,255,255,.07); color: #a8d6c6; font-size: 11px; line-height: 1.5; }
 .stats-grid.public { grid-template-columns: repeat(5, 1fr); }
 

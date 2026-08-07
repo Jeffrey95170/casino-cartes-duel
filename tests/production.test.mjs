@@ -36,7 +36,7 @@ async function waitForServer(url, processOutput) {
   throw new Error(`Production server did not start.\n${processOutput.join("")}`);
 }
 
-test("production build serves the game and social image", async (context) => {
+test("production build serves the game, social image, and OAuth choices", async (context) => {
   const port = await availablePort();
   const output = [];
   const server = spawn(process.execPath, [nextBin, "start", "-H", "127.0.0.1", "-p", String(port)], {
@@ -61,4 +61,10 @@ test("production build serves the game and social image", async (context) => {
   const socialImage = await fetch(`http://127.0.0.1:${port}/og.jpg`);
   assert.equal(socialImage.status, 200);
   assert.match(socialImage.headers.get("content-type") ?? "", /^image\/jpeg\b/i);
+
+  const accountResponse = await fetch(`http://127.0.0.1:${port}/compte`);
+  assert.equal(accountResponse.status, 200);
+  const accountHtml = await accountResponse.text();
+  assert.match(accountHtml, /Continuer avec Google/);
+  assert.match(accountHtml, /Continuer avec GitHub/);
 });
