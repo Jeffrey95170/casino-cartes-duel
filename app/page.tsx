@@ -7,7 +7,8 @@ import { useAuth } from "@/components/auth-provider";
 import { CardBack, CardFace } from "@/components/game-card";
 import { RulesModal } from "@/components/rules-modal";
 import { TutorialModal } from "@/components/tutorial-modal";
-import { trackProductEvent } from "@/lib/analytics";
+import { track } from "@/lib/analytics";
+import { GameAnalyticsTracker } from "@/lib/analytics/game";
 import {
   applyMove,
   cardTotals,
@@ -54,6 +55,9 @@ export default function Home() {
   const [serverBusy, setServerBusy] = useState(false);
   const aiTimer = useRef<number | null>(null);
   const recordedGame = useRef(false);
+  const currentGameId = useRef<string | null>(null);
+  const gameAnalytics = useRef(new GameAnalyticsTracker());
+  const tutorialStartedAt = useRef<number | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setStats(readStats()));
@@ -130,11 +134,15 @@ export default function Home() {
       const aiScore = next.captured[1].length;
       const result = playerScore === aiScore ? "draw" : playerScore > aiScore ? "win" : "loss";
       if (!matchId) setStats((current) => recordResult(current, playerScore, result));
-      trackProductEvent("game_completed", { player_score: playerScore, ai_score: aiScore });
-      trackProductEvent(
-        result === "win" ? "game_won" : result === "loss" ? "game_lost" : "game_drawn",
-        { player_score: playerScore },
-      );
+      if (currentGameId.current) {
+        gameAnalytics.current.complete({
+          gameId: currentGameId.current,
+          result,
+          playerScore,
+          opponentScore: aiScore,
+          roundsPlayed: next.round,
+        });
+      }
     }
   }
 
@@ -144,7 +152,8 @@ export default function Home() {
     setShareStatus("");
     setServerError(null);
     setProgress(null);
-    if (replay) trackProductEvent("replay_clicked");
+    if (replay) gameAnalytics.current.playAgainClicked();
+    const playerGamesBefore = auth.stats?.games_completed ?? stats.gamesCompleted;
     if (auth.configured) {
       if (!auth.session) {
         setServerError("La session invitée est encore en cours de préparation. Réessaie dans un instant.");
@@ -156,8 +165,9 @@ export default function Home() {
         setMatchId(response.matchId);
         setMatchVersion(response.version);
         setDraftName(response.game.names[0]);
+        currentGameId.current = response.matchId;
+        gameAnalytics.current.start({ gameId: response.matchId, playerGamesBefore });
         setResolvedGame(response.game);
-        trackProductEvent("match_started");
         await auth.refreshProfile();
       } catch (error) {
         setServerError(error instanceof Error ? error.message : "Impossible de démarrer la partie vérifiée.");
@@ -168,19 +178,21 @@ export default function Home() {
     }
 
     const next = createInitialGame(playerName);
+    const localGameId = crypto.randomUUID();
     setMatchId(null);
     setDraftName(next.names[0]);
     setStats((current) => incrementStarted(current));
-    trackProductEvent("game_started");
+    currentGameId.current = localGameId;
+    gameAnalytics.current.start({ gameId: localGameId, playerGamesBefore });
     setResolvedGame(next);
   }
 
   function requestStart() {
-    trackProductEvent("play_clicked");
     if (!hasSeenTutorial()) {
       setStartAfterTutorial(true);
       setShowTutorial(true);
-      trackProductEvent("tutorial_started", { source: "first_game" });
+      tutorialStartedAt.current = Date.now();
+      track("tutorial_started", { entry_point: "first_game" });
       return;
     }
     beginGame();
@@ -190,13 +202,19 @@ export default function Home() {
     setShowRules(false);
     setStartAfterTutorial(false);
     setShowTutorial(true);
-    trackProductEvent("tutorial_started", { source });
+    tutorialStartedAt.current = Date.now();
+    track("tutorial_started", { entry_point: source });
   }
 
   function closeTutorial(completed: boolean) {
+    const durationSeconds = tutorialStartedAt.current === null
+      ? 0
+      : Math.max(0, Math.round((Date.now() - tutorialStartedAt.current) / 1000));
+    tutorialStartedAt.current = null;
     rememberTutorial();
     setShowTutorial(false);
-    trackProductEvent(completed ? "tutorial_completed" : "tutorial_skipped");
+    if (completed) track("tutorial_completed", { duration_seconds: durationSeconds });
+    else track("tutorial_skipped", { duration_seconds: durationSeconds });
     if (startAfterTutorial) {
       setStartAfterTutorial(false);
       beginGame();
@@ -215,13 +233,10 @@ export default function Home() {
         action,
       });
       setMatchVersion(response.version);
+      if (action.kind !== "continue" && !response.duplicate) gameAnalytics.current.noteAction(action.kind);
       setResolvedGame(response.game);
       if (response.progress) {
         setProgress(response.progress);
-        trackProductEvent("match_completed_verified", { result: response.progress.result });
-        trackProductEvent("xp_awarded", { xp: response.progress.xp_awarded });
-        if (response.progress.new_level > response.progress.old_level) trackProductEvent("level_up");
-        response.progress.achievements_unlocked.forEach(() => trackProductEvent("achievement_unlocked"));
         await auth.refreshProfile();
       }
     } catch (error) {
@@ -237,7 +252,9 @@ export default function Home() {
       void submitServerAction(move);
       return;
     }
-    setResolvedGame(applyMove(game, move, 0));
+    const next = applyMove(game, move, 0);
+    gameAnalytics.current.noteAction(move.kind);
+    setResolvedGame(next);
   }
 
   function continueRound() {
@@ -251,20 +268,29 @@ export default function Home() {
 
   function returnToSetup() {
     if (aiTimer.current !== null) window.clearTimeout(aiTimer.current);
+    if (currentGameId.current && game.phase !== "finished") {
+      gameAnalytics.current.abandon({ gameId: currentGameId.current, currentRound: game.round });
+    }
     if (matchId && auth.session && game.phase !== "finished") {
       void playSoloAction(auth.session, {
         matchId,
         expectedVersion: matchVersion,
         actionId: crypto.randomUUID(),
         action: { kind: "abandon" },
-      }).then(() => trackProductEvent("match_abandoned")).catch(() => undefined);
+      }).catch(() => undefined);
     }
     clearSelection();
     setShareStatus("");
     setServerError(null);
     setProgress(null);
     setMatchId(null);
+    currentGameId.current = null;
     setGame({ ...EMPTY_GAME, names: [draftName, "Croupier IA"] });
+  }
+
+  function openRules(entryPoint: "setup" | "game_header") {
+    setShowRules(true);
+    track("rules_viewed", { entry_point: entryPoint });
   }
 
   function capture() {
@@ -300,14 +326,11 @@ export default function Home() {
         ? `J’ai battu le Croupier ${scores[0]}–${scores[1]} dans Casino Cartes Duel !`
         : `Le Croupier gagne ${scores[1]}–${scores[0]}. À vous de faire mieux dans Casino Cartes Duel !`;
     const shareData = { title: "Casino Cartes Duel", text: resultText, url: PUBLIC_URL };
-    trackProductEvent("share_clicked");
-    trackProductEvent("share_result");
 
     if (navigator.share) {
       try {
         await navigator.share(shareData);
         setShareStatus("Résultat partagé !");
-        trackProductEvent("share_completed");
         return;
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -317,7 +340,6 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(`${resultText} ${PUBLIC_URL}`);
       setShareStatus("Lien copié — partagez-le où vous voulez.");
-      trackProductEvent("link_copied");
     } catch {
       setShareStatus(`Copiez ce lien : ${PUBLIC_URL}`);
     }
@@ -378,7 +400,7 @@ export default function Home() {
             {!auth.configured && <p className="offline-note">Supabase non configuré : cette partie restera locale et ne donnera aucun XP.</p>}
             <div className="setup-links">
               <button className="text-button" onClick={() => openTutorial("home")}>Tutoriel express</button>
-              <button className="text-button" onClick={() => setShowRules(true)}>Règles complètes</button>
+              <button className="text-button" onClick={() => openRules("setup")}>Règles complètes</button>
               <Link className="text-link" href="/classement">Classement</Link>
             </div>
             <div className="local-stats" aria-label="Vos statistiques">
@@ -408,7 +430,7 @@ export default function Home() {
           <Link className="guide-button" href="/profil">Profil</Link>
           <Link className="guide-button" href="/classement">Classement</Link>
           <button className="guide-button" onClick={() => openTutorial("header")}>Guide</button>
-          <button className="icon-button" onClick={() => setShowRules(true)} aria-label="Voir les règles">?</button>
+          <button className="icon-button" onClick={() => openRules("game_header")} aria-label="Voir les règles">?</button>
           <button className="quiet-button" onClick={returnToSetup}>Quitter</button>
         </div>
       </header>

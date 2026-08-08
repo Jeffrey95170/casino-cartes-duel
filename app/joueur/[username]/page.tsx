@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
-import { trackProductEvent } from "@/lib/analytics";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase/client";
 import type { Achievement } from "@/types/game-api";
 
@@ -17,7 +16,6 @@ export default function PublicProfilePage() {
   const [loading, setLoading] = useState(hasSupabaseConfig());
 
   useEffect(() => {
-    trackProductEvent("profile_viewed");
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
     void supabase.rpc("get_public_profile", { p_username: decodeURIComponent(params.username) }).then(({ data }) => {
@@ -26,7 +24,6 @@ export default function PublicProfilePage() {
   }, [params.username]);
 
   async function share() {
-    trackProductEvent("share_profile");
     const data = { title: `Profil de ${profile?.username}`, text: `Découvrez le profil Casino de ${profile?.username}`, url: window.location.href };
     if (navigator.share) await navigator.share(data).catch(() => undefined); else await navigator.clipboard.writeText(window.location.href);
   }

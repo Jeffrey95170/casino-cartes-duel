@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
 import { useAuth } from "@/components/auth-provider";
-import { trackProductEvent } from "@/lib/analytics";
 import { xpProgress, winRate } from "@/lib/progression";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { LeaderboardEntry } from "@/types/game-api";
@@ -16,7 +15,6 @@ export default function ProfilePage() {
   const progression = xpProgress(auth.stats?.xp ?? 0);
 
   useEffect(() => {
-    trackProductEvent("profile_viewed");
     const supabase = getSupabaseBrowserClient();
     if (!supabase || !auth.session || !auth.profile?.leaderboard_eligible) return;
     void supabase.rpc("get_my_leaderboard_window", { p_radius: 3 }).then(({ data }) => {
@@ -32,7 +30,6 @@ export default function ProfilePage() {
   }
 
   async function shareProfile() {
-    trackProductEvent("share_profile");
     const shareUrl = `${window.location.origin}/joueur/${encodeURIComponent(auth.profile!.username)}`;
     const data = { title: `Profil de ${auth.profile?.username}`, text: "Mon profil Casino Cartes Duel", url: shareUrl };
     if (navigator.share) await navigator.share(data).catch(() => undefined);

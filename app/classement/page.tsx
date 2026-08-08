@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
 import { useAuth } from "@/components/auth-provider";
-import { trackProductEvent } from "@/lib/analytics";
+import { track } from "@/lib/analytics";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { LeaderboardEntry } from "@/types/game-api";
 
@@ -15,6 +15,7 @@ export default function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasTrackedView = useRef(false);
 
   const load = useCallback(async (nextMode: "top" | "me") => {
     const supabase = getSupabaseBrowserClient();
@@ -30,7 +31,17 @@ export default function LeaderboardPage() {
   }, []);
 
   useEffect(() => {
-    trackProductEvent("leaderboard_viewed");
+    if (hasTrackedView.current) return;
+    hasTrackedView.current = true;
+    let entryPoint = "direct";
+    try {
+      const referrer = new URL(document.referrer);
+      if (referrer.origin === window.location.origin) entryPoint = referrer.pathname;
+      else entryPoint = "external_referrer";
+    } catch {
+      // Direct visit: keep the privacy-safe fallback without the full referrer URL.
+    }
+    track("leaderboard_viewed", { entry_point: entryPoint });
     const supabase = getSupabaseBrowserClient();
     if (!supabase) return;
     void supabase.rpc("get_leaderboard", { p_limit: 100 }).then((result) => {
@@ -42,7 +53,6 @@ export default function LeaderboardPage() {
 
   function changeMode(nextMode: "top" | "me") {
     setMode(nextMode);
-    if (nextMode === "me") trackProductEvent("leaderboard_my_position");
     void load(nextMode);
   }
 

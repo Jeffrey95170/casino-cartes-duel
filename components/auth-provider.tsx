@@ -3,7 +3,8 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { trackProductEvent } from "@/lib/analytics";
+import { authAnalytics } from "@/lib/analytics/auth";
+import type { SignupMethod } from "@/lib/analytics/events";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase/client";
 import type { Achievement, MatchSummary, PlayerProfile, PlayerStats } from "@/types/game-api";
 
@@ -35,6 +36,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 function readableError(error: unknown): string {
   return error instanceof Error ? error.message : "Une erreur Supabase est survenue.";
+}
+
+function analyticsAuthMethod(user: User): SignupMethod {
+  const provider = user.app_metadata.provider;
+  return provider === "google" || provider === "github" ? provider : "email";
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -87,7 +93,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (current.data.session) return;
     const { error: authError } = await supabase.auth.signInAnonymously();
     if (authError) throw authError;
-    trackProductEvent("anonymous_session_created");
   }, []);
 
   useEffect(() => {
@@ -111,10 +116,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     void initialize();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
+      const nextUser = nextSession?.user ?? null;
+      authAnalytics.handleAuthStateChange(event, nextUser ? {
+        id: nextUser.id,
+        isAnonymous: nextUser.is_anonymous ?? false,
+        provider: analyticsAuthMethod(nextUser),
+      } : null);
       setSession(nextSession);
-      setUser(nextSession?.user ?? null);
+      setUser(nextUser);
       window.setTimeout(() => void refreshProfile().catch((cause) => setError(readableError(cause))), 0);
     });
     return () => {
@@ -134,24 +145,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const upgradeAccount = useCallback(async ({ email, password, username }: UpgradeInput) => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase || !user?.is_anonymous) throw new Error("Ce compte n’est pas un compte invité.");
-    trackProductEvent("account_upgrade_started");
-    await updateUsername(username);
-    const { data, error: updateError } = await supabase.auth.updateUser({ email, password });
-    if (updateError) throw updateError;
-    if (data.user.id !== user.id) throw new Error("La conversion a créé un identifiant différent. Opération interrompue.");
-    trackProductEvent("account_created");
-    await refreshProfile();
+    authAnalytics.startSignup("email");
+    try {
+      await updateUsername(username);
+      const { data, error: updateError } = await supabase.auth.updateUser({ email, password });
+      if (updateError) throw updateError;
+      if (data.user.id !== user.id) throw new Error("La conversion a créé un identifiant différent. Opération interrompue.");
+      await refreshProfile();
+    } catch (cause) {
+      authAnalytics.cancelSignup();
+      throw cause;
+    }
   }, [refreshProfile, updateUsername, user]);
 
   const linkProvider = useCallback(async (provider: OAuthProvider) => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase || !user?.is_anonymous) throw new Error("La liaison exige un compte invité actif.");
-    trackProductEvent("account_upgrade_started");
+    authAnalytics.startSignup(provider);
     const { error: linkError } = await supabase.auth.linkIdentity({
       provider,
       options: { redirectTo: new URL("/compte", window.location.origin).toString() },
     });
-    if (linkError) throw linkError;
+    if (linkError) {
+      authAnalytics.cancelSignup();
+      throw linkError;
+    }
   }, [user]);
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -159,7 +177,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) throw new Error("Supabase n’est pas configuré.");
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) throw signInError;
-    trackProductEvent("login");
   }, []);
 
   const signOut = useCallback(async () => {
@@ -167,7 +184,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) return;
     const { error: signOutError } = await supabase.auth.signOut();
     if (signOutError) throw signOutError;
-    trackProductEvent("logout");
     await signInGuest();
   }, [signInGuest]);
 

@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Suspense } from "react";
+
+import { AnalyticsPageView } from "@/components/analytics-pageview";
 import { AuthProvider } from "@/components/auth-provider";
 import "./globals.css";
 
@@ -61,7 +63,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="fr">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <AuthProvider>{children}</AuthProvider>
-        <Analytics />
+        <Suspense fallback={null}><AnalyticsPageView /></Suspense>
         <SpeedInsights />
       </body>
     </html>
