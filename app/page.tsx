@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import { useAuth } from "@/components/auth-provider";
+import { BrandMark } from "@/components/brand-mark";
 import { CardBack, CardFace } from "@/components/game-card";
 import { RulesModal } from "@/components/rules-modal";
 import { TutorialModal } from "@/components/tutorial-modal";
@@ -321,11 +322,11 @@ export default function Home() {
 
   async function shareResult() {
     const resultText = winner === null
-      ? `Égalité ${scores[0]}–${scores[1]} dans Casino Cartes Duel !`
+      ? `Égalité ${scores[0]}–${scores[1]} dans Capture 52 !`
       : winner === 0
-        ? `J’ai battu le Croupier ${scores[0]}–${scores[1]} dans Casino Cartes Duel !`
-        : `Le Croupier gagne ${scores[1]}–${scores[0]}. À vous de faire mieux dans Casino Cartes Duel !`;
-    const shareData = { title: "Casino Cartes Duel", text: resultText, url: PUBLIC_URL };
+        ? `J’ai battu le Rival IA ${scores[0]}–${scores[1]} dans Capture 52 !`
+        : `Le Rival IA gagne ${scores[1]}–${scores[0]}. À vous de faire mieux dans Capture 52 !`;
+    const shareData = { title: "Capture 52", text: resultText, url: PUBLIC_URL };
 
     if (navigator.share) {
       try {
@@ -350,16 +351,16 @@ export default function Home() {
       <main className="setup-shell">
         <section className="setup-card">
           <div className="setup-copy">
-            <div className="brand-mark"><span>♠</span> Maison Noire</div>
+            <BrandMark showTagline />
             <span className="beta-badge">Progression V1</span>
-            <p className="eyebrow">Jeu de stratégie · Solo contre l’IA</p>
-            <h1>Casino</h1>
-            <p className="setup-lead">Calculez juste. Tendez vos pièges. Raflez la table.</p>
-            <p className="trust-line">Gratuit · Compte invité automatique · Sans argent réel</p>
+            <p className="eyebrow">Card strategy · Solo contre l’IA</p>
+            <h1><span>Think.</span><span>Build.</span><span>Capture.</span></h1>
+            <p className="setup-lead">Chaque carte est une décision. Chaque combinaison, un avantage.</p>
+            <p className="trust-line">52 cartes · 3 manches · aucune mise, seulement la stratégie</p>
             <div className="quick-rules" aria-label="Résumé du jeu">
               <div><strong>3</strong><span>manches</span></div>
-              <div><strong>1</strong><span>Croupier IA</span></div>
-              <div><strong>52</strong><span>cartes à rafler</span></div>
+              <div><strong>1</strong><span>Rival IA</span></div>
+              <div><strong>52</strong><span>cartes à maîtriser</span></div>
             </div>
           </div>
 
@@ -370,9 +371,9 @@ export default function Home() {
               <span className="deco-card deco-three">V<span>♣</span></span>
             </div>
             <div className="setup-action-copy">
-              <p className="eyebrow">Prêt en quelques secondes</p>
-              <h2>Affrontez le Croupier</h2>
-              <p>L’IA calcule ses captures. Les résultats vérifiés alimentent votre progression.</p>
+              <p className="eyebrow">Prêt à entrer dans l’arène</p>
+              <h2>Affrontez le Rival IA</h2>
+              <p>L’IA analyse ses captures, anticipe vos choix et teste votre stratégie à chaque tour.</p>
             </div>
             {auth.configured ? (
               <div className="account-summary">
@@ -419,7 +420,7 @@ export default function Home() {
   return (
     <main className="game-shell">
       <header className="game-header">
-        <div className="brand-mark compact"><span>♠</span> Casino</div>
+        <BrandMark compact />
         <div className="round-track" aria-label={`Manche ${game.round} sur 3`}>
           {[1, 2, 3].map((round) => (
             <span key={round} className={round <= game.round ? "active" : ""}>{round}</span>
@@ -445,7 +446,7 @@ export default function Home() {
               {player === 1 ? "IA" : game.names[player].slice(0, 1).toUpperCase()}
             </span>
             <span className="player-data">
-              <strong>{game.names[player]}</strong>
+              <strong>{player === 1 ? "Rival IA" : game.names[player]}</strong>
               <small>{game.hands[player].length} carte{game.hands[player].length !== 1 ? "s" : ""} en main</small>
             </span>
             <span className="score-number"><b>{scores[player]}</b><small>capturées</small></span>
@@ -507,14 +508,14 @@ export default function Home() {
             })
           )}
         </div>
-        {game.message && <p className="table-message" role="status"><span>✦</span>{game.message}</p>}
+        {game.message && <p className="table-message" role="status"><span>◆</span>{game.message.replaceAll("Croupier IA", "Rival IA").replaceAll("Croupier", "Rival")}</p>}
       </section>
 
       <section className="hand-panel">
         <div className="hand-heading">
           <div>
             <p className="eyebrow">{game.phase === "ai" || serverBusy ? "L’intelligence artificielle joue" : "À vous de jouer"}</p>
-            <h2>{game.phase === "ai" || serverBusy ? "Le Croupier réfléchit…" : game.names[0]}</h2>
+            <h2>{game.phase === "ai" || serverBusy ? "Le Rival IA réfléchit…" : game.names[0]}</h2>
           </div>
           {game.phase === "playing" && <p className="instruction">Touchez une carte, puis les cartes à capturer.</p>}
         </div>
@@ -540,7 +541,7 @@ export default function Home() {
         {game.phase === "ai" || serverBusy ? (
           <div className="ai-thinking" role="status" aria-live="polite">
             <span className="thinking-dots"><i></i><i></i><i></i></span>
-            <span><b>Analyse en cours</b><small>Le Croupier compare les captures et anticipe votre prochain coup.</small></span>
+            <span><b>Analyse en cours</b><small>Le Rival IA compare les captures et anticipe votre prochain coup.</small></span>
           </div>
         ) : (
           <div className="action-bar">
@@ -569,9 +570,9 @@ export default function Home() {
             <p className="eyebrow">La partie continue</p>
             <div className="round-number">{game.round}</div>
             <h2 id="round-title">Manche {game.round}</h2>
-            <p>{game.message}</p>
+            <p>{game.message.replaceAll("Croupier IA", "Rival IA").replaceAll("Croupier", "Rival")}</p>
             <div className="mid-scores">
-              <span>{game.names[0]} <b>{scores[0]}</b></span><i>—</i><span><b>{scores[1]}</b> {game.names[1]}</span>
+              <span>{game.names[0]} <b>{scores[0]}</b></span><i>—</i><span><b>{scores[1]}</b> Rival IA</span>
             </div>
             <button className="primary-button" onClick={continueRound} disabled={serverBusy}>Continuer <span>→</span></button>
           </section>
@@ -586,15 +587,15 @@ export default function Home() {
             <h2 id="final-title">{winner === null ? "Égalité" : winner === 0 ? "Victoire !" : "Défaite"}</h2>
             <p>
               {winner === null
-                ? "Vous avez capturé autant de cartes que le Croupier."
+                ? "Vous avez capturé autant de cartes que le Rival IA."
                 : winner === 0
-                  ? "Vous avez déjoué le Croupier IA."
-                  : "Le Croupier remporte ce duel. Prenez votre revanche !"}
+                  ? "Vous avez déjoué le Rival IA."
+                  : "Le Rival IA remporte ce duel. Prenez votre revanche !"}
             </p>
             <div className="final-scores">
               {([0, 1] as Player[]).map((player) => (
                 <div className={winner === player ? "winner" : ""} key={player}>
-                  <span>{game.names[player]}</span><strong>{scores[player]}</strong><small>cartes capturées</small>
+                  <span>{player === 1 ? "Rival IA" : game.names[player]}</span><strong>{scores[player]}</strong><small>cartes capturées</small>
                 </div>
               ))}
             </div>

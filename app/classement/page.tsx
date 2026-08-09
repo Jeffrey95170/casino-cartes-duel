@@ -60,7 +60,7 @@ export default function LeaderboardPage() {
     <main className="portal-shell">
       <AppHeader />
       <div className="portal-content narrow">
-        <section className="leaderboard-heading"><p className="eyebrow">Progression V1</p><h1>Classement progression</h1><p>Progressez en jouant et grimpez parmi les joueurs de Casino Cartes Duel.</p></section>
+        <section className="leaderboard-heading"><p className="eyebrow">Capture 52 · Progression V1</p><h1>Classement progression</h1><p>Progressez en jouant et grimpez parmi les stratèges de Capture 52.</p></section>
         <div className="leaderboard-tabs" role="tablist"><button role="tab" aria-selected={mode === "top"} onClick={() => changeMode("top")}>Top 100</button><button role="tab" aria-selected={mode === "me"} onClick={() => changeMode("me")}>Ma position</button></div>
         {loading ? <p className="portal-loading">Chargement du classement…</p> : error ? <p className="server-error dark">{error}</p> : entries.length ? (
           <section className="leaderboard-list" aria-label="Classement des joueurs">

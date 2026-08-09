@@ -23,25 +23,25 @@ const productionHost =
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${productionHost}`),
-  title: "Casino Cartes Duel — Jeu de stratégie gratuit",
+  title: "Capture 52 — Think. Build. Capture.",
   description:
-    "Affrontez le Croupier dans Casino Cartes Duel, un jeu de cartes stratégique où calcul, anticipation et pièges font la différence. Gratuit et sans argent réel.",
-  applicationName: "Casino Cartes Duel",
+    "Capture 52 est un jeu de cartes stratégique compétitif contre une intelligence artificielle. Pensez, construisez et capturez — sans argent réel.",
+  applicationName: "Capture 52",
   robots: { index: true, follow: true },
   openGraph: {
-    title: "Casino Cartes Duel — Jeu de stratégie gratuit",
+    title: "Capture 52 — Think. Build. Capture.",
     description:
-      "Affrontez le Croupier dans Casino Cartes Duel, un jeu de cartes stratégique où calcul, anticipation et pièges font la différence. Gratuit et sans argent réel.",
+      "Un duel de cartes stratégique contre l’IA. Pensez, construisez et capturez — sans argent réel.",
     type: "website",
     locale: "fr_FR",
-    siteName: "Casino Cartes Duel",
-    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Casino Cartes Duel" }],
+    siteName: "Capture 52",
+    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Capture 52 — Think. Build. Capture." }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Casino Cartes Duel — Jeu de stratégie gratuit",
+    title: "Capture 52 — Think. Build. Capture.",
     description:
-      "Affrontez le Croupier dans Casino Cartes Duel, un jeu de cartes stratégique où calcul, anticipation et pièges font la différence. Gratuit et sans argent réel.",
+      "Un duel de cartes stratégique contre l’IA. Pensez, construisez et capturez — sans argent réel.",
     images: ["/og.jpg"],
   },
   icons: {
@@ -55,7 +55,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
-  themeColor: "#071b17",
+  themeColor: "#080A0C",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

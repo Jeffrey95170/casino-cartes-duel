@@ -15,7 +15,7 @@ const STEPS = [
   },
   {
     title: "Préparez un piège",
-    copy: "Créez un total que vous pourrez capturer au tour suivant. Le Croupier peut tenter de le perturber.",
+    copy: "Créez un total que vous pourrez capturer au tour suivant. Le Rival IA peut tenter de le perturber.",
     visual: <div className="tutorial-build"><span>3♦ + 3♠</span><b>Total 6</b><small>gardez un 6 en main</small></div>,
   },
   {

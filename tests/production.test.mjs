@@ -54,8 +54,8 @@ test("production build serves the game, social image, and OAuth choices", async 
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Casino Cartes Duel — Jeu de stratégie gratuit<\/title>/i);
-  assert.match(html, /Gratuit et sans argent réel/);
+  assert.match(html, /<title>Capture 52 — Think\. Build\. Capture\.<\/title>/i);
+  assert.match(html, /Chaque carte est une décision/);
   assert.match(html, /Jouer maintenant/);
 
   const socialImage = await fetch(`http://127.0.0.1:${port}/og.jpg`);

@@ -31,7 +31,7 @@ export default function ProfilePage() {
 
   async function shareProfile() {
     const shareUrl = `${window.location.origin}/joueur/${encodeURIComponent(auth.profile!.username)}`;
-    const data = { title: `Profil de ${auth.profile?.username}`, text: "Mon profil Casino Cartes Duel", url: shareUrl };
+    const data = { title: `Profil de ${auth.profile?.username}`, text: "Mon profil Capture 52", url: shareUrl };
     if (navigator.share) await navigator.share(data).catch(() => undefined);
     else await navigator.clipboard.writeText(shareUrl);
   }

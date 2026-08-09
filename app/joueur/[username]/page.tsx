@@ -24,7 +24,7 @@ export default function PublicProfilePage() {
   }, [params.username]);
 
   async function share() {
-    const data = { title: `Profil de ${profile?.username}`, text: `Découvrez le profil Casino de ${profile?.username}`, url: window.location.href };
+    const data = { title: `Profil de ${profile?.username}`, text: `Découvrez le profil Capture 52 de ${profile?.username}`, url: window.location.href };
     if (navigator.share) await navigator.share(data).catch(() => undefined); else await navigator.clipboard.writeText(window.location.href);
   }
 

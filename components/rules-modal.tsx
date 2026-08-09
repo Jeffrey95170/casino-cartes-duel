@@ -33,7 +33,7 @@ export function RulesModal({
           <article><span>03</span><h3>Préparez</h3><p>Ajoutez votre carte si vous gardez en main une carte égale au nouveau total.</p></article>
           <article><span>04</span><h3>Ou posez</h3><p>Sans capture, laissez votre carte seule sur la table pour une occasion future.</p></article>
         </div>
-        <div className="rule-note ai-rule-note"><b>Votre adversaire</b><p>Le Croupier IA compare les captures, privilégie les prises rentables et prépare des combinaisons.</p></div>
+        <div className="rule-note ai-rule-note"><b>Votre adversaire</b><p>Le Rival IA compare les captures, privilégie les prises rentables et prépare des combinaisons.</p></div>
         <div className="rule-note"><b>Le but</b><p>Après trois manches, la plus grande réserve gagne. Les dernières cartes vont au dernier joueur ayant capturé.</p></div>
         <div className="rules-actions">
           <button className="secondary-button" onClick={onTutorial}>Voir le tutoriel</button>
