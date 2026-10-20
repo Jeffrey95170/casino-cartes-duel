@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import { useAuth } from "@/components/auth-provider";
 import { BrandMark } from "@/components/brand-mark";
+import { SoundControls, useGameAudio } from "@/components/audio-provider";
+import { LevelProgress } from "@/components/player-journey";
 import { CardBack, CardFace } from "@/components/game-card";
 import { RulesModal } from "@/components/rules-modal";
 import { TutorialModal } from "@/components/tutorial-modal";
@@ -36,10 +38,11 @@ import {
 } from "@/lib/local-storage";
 import type { ProgressReward } from "@/types/game-api";
 
-const PUBLIC_URL = "https://casino-cartes-duel.vercel.app/";
+const PUBLIC_URL = "https://capture52.vercel.app/";
 
 export default function Home() {
   const auth = useAuth();
+  const { play: playSound } = useGameAudio();
   const [game, setGame] = useState<Game>(EMPTY_GAME);
   const [draftName, setDraftName] = useState("Joueur");
   const [selectedHand, setSelectedHand] = useState<string | null>(null);
@@ -59,6 +62,22 @@ export default function Home() {
   const currentGameId = useRef<string | null>(null);
   const gameAnalytics = useRef(new GameAnalyticsTracker());
   const tutorialStartedAt = useRef<number | null>(null);
+  const previousSoundGame = useRef<Game>(EMPTY_GAME);
+
+  useEffect(() => {
+    const previous = previousSoundGame.current;
+    previousSoundGame.current = game;
+    if (game.phase === "setup") return;
+    if (game.phase === "finished" && previous.phase !== "finished") {
+      playSound(game.captured[0].length > game.captured[1].length ? "win" : "finish");
+    } else if (previous.phase === "setup" || previous.phase === "finished" || game.round !== previous.round) {
+      playSound("deal");
+    } else if (game.captured[0].length + game.captured[1].length > previous.captured[0].length + previous.captured[1].length) {
+      playSound("capture");
+    } else if (game !== previous) {
+      playSound(game.table.some((group) => group.cards.length > 1 && !previous.table.some((old) => old.id === group.id)) ? "build" : "card");
+    }
+  }, [game, playSound]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setStats(readStats()));
@@ -352,7 +371,7 @@ export default function Home() {
         <section className="setup-card">
           <div className="setup-copy">
             <BrandMark showTagline />
-            <span className="beta-badge">Progression V1</span>
+            <span className="beta-badge">Nouveautés</span>
             <p className="eyebrow">Card strategy · Solo contre l’IA</p>
             <h1><span>Think.</span><span>Build.</span><span>Capture.</span></h1>
             <p className="setup-lead">Chaque carte est une décision. Chaque combinaison, un avantage.</p>
@@ -365,6 +384,7 @@ export default function Home() {
           </div>
 
           <div className="setup-form">
+            <div className="setup-audio"><SoundControls /></div>
             <div className="deco-cards" aria-hidden="true">
               <span className="deco-card deco-one">A<span>♠</span></span>
               <span className="deco-card deco-two red">D<span>♥</span></span>
@@ -409,6 +429,7 @@ export default function Home() {
               <span><b>{auth.stats?.wins ?? stats.wins}</b> victoire{(auth.stats?.wins ?? stats.wins) !== 1 ? "s" : ""}</span>
               <span><b>{auth.stats?.best_cards_captured ?? stats.bestCaptured}</b> record</span>
             </div>
+            {auth.stats && <LevelProgress xp={auth.stats.xp} compact />}
           </div>
         </section>
         <RulesModal open={showRules} onClose={() => setShowRules(false)} onTutorial={() => openTutorial("rules")} />
@@ -428,6 +449,7 @@ export default function Home() {
           <small>Manche {game.round} / 3</small>
         </div>
         <div className="header-actions">
+          <SoundControls />
           <Link className="guide-button" href="/profil">Profil</Link>
           <Link className="guide-button" href="/classement">Classement</Link>
           <button className="guide-button" onClick={() => openTutorial("header")}>Guide</button>
@@ -526,6 +548,7 @@ export default function Home() {
               key={card.id}
               className="hand-card-button"
               onClick={() => {
+                playSound("select");
                 setSelectedHand(selectedHand === card.id ? null : card.id);
                 setSelectedGroups([]);
               }}
@@ -563,6 +586,8 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {game.phase !== "finished" && <div className="duel-objective" aria-label="Objectif du duel"><span>✦ Objectif du duel</span><b>{scores[0] >= 27 ? "Majorité atteinte !" : scores[0] >= 10 ? "Visez la majorité : 27 cartes" : "Première cible : 10 cartes"}</b><progress value={Math.min(scores[0], scores[0] >= 10 ? 27 : 10)} max={scores[0] >= 10 ? 27 : 10} aria-label="Cartes capturées pour l’objectif" /><small>{scores[0]} cartes capturées</small></div>}
 
       {game.phase === "round" && (
         <div className="modal-backdrop">
@@ -602,11 +627,13 @@ export default function Home() {
             {progress ? (
               <div className="progress-reward" aria-live="polite">
                 <strong>+{progress.xp_awarded} XP</strong>
+                {progress.new_level > progress.old_level && <b className="level-up-banner">✦ Niveau supérieur débloqué !</b>}
                 <span>Niveau {progress.old_level}{progress.new_level > progress.old_level ? ` → Niveau ${progress.new_level}` : ""}</span>
                 {progress.old_rank && progress.new_rank && <span>Classement : #{progress.old_rank} → #{progress.new_rank}</span>}
                 {progress.achievements_unlocked.map((achievement) => (
                   <span className="achievement-toast" key={achievement.code}>{achievement.icon} Succès : {achievement.name}</span>
                 ))}
+                <LevelProgress xp={progress.new_xp} />
               </div>
             ) : (
               <p className="final-stat">Record {matchId ? "du profil" : "sur cet appareil"} : <b>{Math.max(auth.stats?.best_cards_captured ?? stats.bestCaptured, scores[0])} cartes</b></p>

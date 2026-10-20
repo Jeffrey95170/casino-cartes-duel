@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { authAnalytics } from "@/lib/analytics/auth";
 import type { SignupMethod } from "@/lib/analytics/events";
 import { getSupabaseBrowserClient, hasSupabaseConfig } from "@/lib/supabase/client";
+import { isValidUsername } from "@/lib/progression";
 import type { Achievement, MatchSummary, PlayerProfile, PlayerStats } from "@/types/game-api";
 
 type UpgradeInput = { email: string; password: string; username: string };
@@ -137,10 +138,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateUsername = useCallback(async (username: string) => {
     const supabase = getSupabaseBrowserClient();
     if (!supabase || !user) throw new Error("Session indisponible.");
-    const { error: updateError } = await supabase.from("profiles").update({ username }).eq("id", user.id);
-    if (updateError) throw updateError;
-    await refreshProfile();
-  }, [refreshProfile, user]);
+    if (!isValidUsername(username)) throw new Error("Pseudonyme invalide : 3 à 20 lettres, chiffres, _ ou -.");
+    const { data, error: updateError } = await supabase.from("profiles").update({ username }).eq("id", user.id).select("*").single();
+    if (updateError) throw new Error(updateError.code === "23505" ? "Ce pseudonyme est déjà utilisé." : "Impossible d’enregistrer le nom. Vérifie ta connexion et réessaie.");
+    setProfile(data as PlayerProfile);
+  }, [user]);
 
   const upgradeAccount = useCallback(async ({ email, password, username }: UpgradeInput) => {
     const supabase = getSupabaseBrowserClient();

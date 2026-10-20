@@ -5,6 +5,7 @@ import { Suspense } from "react";
 
 import { AnalyticsPageView } from "@/components/analytics-pageview";
 import { AuthProvider } from "@/components/auth-provider";
+import { AudioProvider } from "@/components/audio-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -19,7 +20,7 @@ const geistMono = Geist_Mono({
 
 const productionHost =
   process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ??
-  "casino-cartes-duel.vercel.app";
+  "capture52.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${productionHost}`),
@@ -62,7 +63,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="fr">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider><AudioProvider>{children}</AudioProvider></AuthProvider>
         <Suspense fallback={null}><AnalyticsPageView /></Suspense>
         <SpeedInsights />
       </body>

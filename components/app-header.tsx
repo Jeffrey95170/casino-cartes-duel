@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { BrandMark } from "@/components/brand-mark";
+import { SoundControls } from "@/components/audio-provider";
 
 export function AppHeader() {
   return (
@@ -13,6 +14,7 @@ export function AppHeader() {
         <Link href="/profil">Mon profil</Link>
         <Link href="/classement">Classement</Link>
       </nav>
+      <SoundControls />
     </header>
   );
 }

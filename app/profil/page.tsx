@@ -5,14 +5,16 @@ import { useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
 import { useAuth } from "@/components/auth-provider";
-import { xpProgress, winRate } from "@/lib/progression";
+import { winRate } from "@/lib/progression";
+import { ProfileEditor } from "@/components/profile-editor";
+import { AchievementCollection, CareerGoals, LevelProgress } from "@/components/player-journey";
+import { playerTitle } from "@/lib/player-journey";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { LeaderboardEntry } from "@/types/game-api";
 
 export default function ProfilePage() {
   const auth = useAuth();
   const [position, setPosition] = useState<LeaderboardEntry | null>(null);
-  const progression = xpProgress(auth.stats?.xp ?? 0);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -42,18 +44,16 @@ export default function ProfilePage() {
       <div className="portal-content">
         <section className="profile-hero">
           <div className="profile-avatar">{auth.profile.username.slice(0, 1).toUpperCase()}</div>
-          <div><p className="eyebrow">{auth.isAnonymous ? "Compte invité" : "Profil joueur"}</p><h1>{auth.profile.username}</h1><p>Niveau {auth.stats.level} · {auth.stats.xp} XP</p></div>
+          <div><p className="eyebrow">{auth.isAnonymous ? "Compte invité" : "Profil joueur"}</p><h1>{auth.profile.username}</h1><p>{playerTitle(auth.stats.level)} · Niveau {auth.stats.level} · {auth.stats.xp} XP</p></div>
           <div className="profile-actions">
             {auth.isAnonymous && <Link className="primary-link" href="/compte">Sauvegarder ma progression</Link>}
             {!auth.isAnonymous && auth.profile.leaderboard_eligible && <button className="secondary-button" onClick={shareProfile}>Partager</button>}
           </div>
         </section>
 
-        <section className="xp-card" aria-label="Progression XP">
-          <div><b>Niveau {progression.level}</b><span>{auth.stats.xp} / {progression.nextThreshold} XP</span></div>
-          <div className="xp-track"><span style={{ width: `${progression.percent}%` }} /></div>
-          <small>{progression.nextThreshold - auth.stats.xp} XP avant le niveau suivant</small>
-        </section>
+        <ProfileEditor />
+        <LevelProgress xp={auth.stats.xp} />
+        <CareerGoals stats={auth.stats} />
 
         <section className="stats-grid">
           <article><span>Parties</span><b>{auth.stats.games_completed}</b></article>
@@ -67,10 +67,7 @@ export default function ProfilePage() {
         </section>
 
         <div className="portal-columns">
-          <section className="portal-card">
-            <div className="section-heading"><div><p className="eyebrow">Collection</p><h2>Succès obtenus</h2></div><b>{auth.achievements.length}/6</b></div>
-            {auth.achievements.length ? <div className="achievement-list">{auth.achievements.map((item) => <article key={item.code}><span>{item.icon}</span><div><b>{item.name}</b><small>{item.description}</small></div></article>)}</div> : <p className="muted-copy">Termine une partie vérifiée pour débloquer tes premiers succès.</p>}
-          </section>
+          <AchievementCollection achievements={auth.achievements} />
           <section className="portal-card">
             <p className="eyebrow">Progression</p><h2>Classement</h2>
             {position ? <div className="rank-callout"><strong>#{position.rank}</strong><span>au classement progression</span></div> : <p className="muted-copy">{auth.isAnonymous ? "Crée ton compte et termine 3 parties vérifiées pour apparaître." : `${Math.max(0, 3 - auth.stats.solo_verified_games)} partie(s) vérifiée(s) avant l’éligibilité.`}</p>}
